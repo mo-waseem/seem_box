@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>seem_box Settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <h1>Connect seem_box</h1>
+    <p>Connected server: <a href="https://seem-box.waseemkn96.workers.dev/settings" target="_blank" rel="noreferrer">seem-box.waseemkn96.workers.dev</a>. Configure its AI provider in Settings.</p>
+    <form id="settings">
+      <label for="token">Pairing token</label>
+      <p>Use the same value as the deployed server's <code>SEEM_BOX_EXTENSION_TOKEN</code> secret. This is not your AI API key or YouTube cookie.</p>
+      <input id="token" type="password" minlength="32" required autocomplete="off" spellcheck="false">
+      <button type="submit">Save Connection</button>
+    </form>
+    <p id="status" role="status"></p>
+    <small>The token is stored locally in this Chrome profile. Only transcript text and video details are sent to your app when you click Summarize.</small>
+    <script src="options.js"></script>
+  </body>
+</html>

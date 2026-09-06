@@ -1,0 +1,7 @@
+body { width: 340px; margin: 24px; background: #191b17; color: #eae8e2; font: 14px/1.5 system-ui, sans-serif; }
+h1 { font-size: 22px; }
+a { color: #d2ee91; }
+small, form p { color: #b6bbab; }
+input { box-sizing: border-box; width: 100%; padding: 10px; margin: 8px 0 16px; color: inherit; background: #10120e; border: 1px solid #55574e; border-radius: 6px; }
+button { padding: 10px 16px; background: #d2ee91; color: #1c2412; font: inherit; font-weight: 650; border: 0; border-radius: 8px; cursor: pointer; }
+:focus-visible { outline: 2px solid #d2ee91; outline-offset: 3px; }
