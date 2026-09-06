@@ -79,7 +79,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return execution.result;
     }
     const { token } = await chrome.storage.local.get("token");
-    if (!token) throw new Error("Click the seem_box extension toolbar icon to set your pairing token first.");
+    if (!token) throw new Error("Click the Youtube AI Summary extension toolbar icon to set your pairing token first.");
     const payload = message.payload;
     if (payload?.videoId !== message.videoId || typeof payload.transcript !== "string" || payload.transcript.length > 500000) {
       throw new Error("Invalid transcript or transcript exceeds 500,000 characters.");

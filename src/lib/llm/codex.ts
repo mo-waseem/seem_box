@@ -2,6 +2,7 @@ import "server-only";
 import { AppError } from "@/lib/errors";
 import { refreshCodexTokens } from "./device-auth";
 import { readCodexTokens, writeCodexTokens, type CodexTokens } from "./token-store";
+import { cloudflareAuth, usesCloudflareAuth } from "./auth-cloudflare";
 
 const RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 const MODELS_URL = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0";
@@ -80,6 +81,7 @@ async function requireTokens(): Promise<CodexTokens> {
 }
 
 async function forceRefresh(current: CodexTokens): Promise<CodexTokens> {
+  if (usesCloudflareAuth()) return cloudflareAuth({ op: "refresh", current });
   const fresh = await refreshCodexTokens(current.refresh);
   const merged: CodexTokens = {
     ...fresh,

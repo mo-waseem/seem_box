@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "minimum_chrome_version": "120",
-  "name": "seem_box for YouTube",
+  "name": "Youtube AI Summary",
   "version": "0.1.0",
-  "description": "Summarize YouTube captions with seem_box.",
+  "description": "A simple extension for AI summaries and key takeaways, right on YouTube. Just what you need, nothing extra.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -14,7 +14,7 @@
   "host_permissions": ["https://www.youtube.com/*", "https://seem-box.waseemkn96.workers.dev/*"],
   "background": { "service_worker": "background.js" },
   "action": {
-    "default_title": "Configure seem_box",
+    "default_title": "Youtube AI Summary",
     "default_popup": "options.html",
     "default_icon": {
       "16": "icons/icon-16.png",

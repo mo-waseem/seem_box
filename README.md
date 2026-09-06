@@ -29,9 +29,40 @@ SEEM_BOX_LLM_PROVIDER=codex
 SEEM_BOX_CODEX_MODEL=gpt-5.4
 ```
 
-Open Settings and select **Connect via device code**. The app uses OpenAI's Codex device authorization flow and stores the resulting OAuth tokens in `~/.seem_box/auth.json` with mode `0600`. Access tokens refresh automatically.
+Open Settings and select **Connect via device code**. The app uses OpenAI's Codex device authorization flow. Local Node development stores OAuth tokens in `~/.seem_box/auth.json` with mode `0600`. On Cloudflare, pending logins and tokens are stored in the `SEEM_BOX_AUTH` Durable Object instead. Access tokens refresh automatically.
 
 The default model can change as ChatGPT's model catalog changes. Override `SEEM_BOX_CODEX_MODEL` if the backend rejects the default model.
+
+## Cloudflare Deployment
+
+The repository includes the OpenNext adapter, `open-next.config.ts`, a custom `worker.js`, and `wrangler.jsonc` for the existing Worker named `seem-box`. The custom Worker exports the authentication Durable Object and protects the personal app with HTTP Basic authentication. Do not replace its entry point with `.open-next/worker.js`, which would bypass those protections and omit the object export.
+
+For the connected GitHub repository, configure the Worker's **Settings > Build** commands:
+
+| Setting | Value |
+| --- | --- |
+| Build command | `npm run build:cloudflare` |
+| Deploy command | `npm run deploy:cloudflare` |
+| Root directory | The directory containing this project's `package.json` |
+
+Under the Worker's **Settings > Variables and Secrets**, add these as encrypted runtime secrets, not just build environment variables:
+
+| Secret | Purpose |
+| --- | --- |
+| `SEEM_BOX_ADMIN_PASSWORD` | A random password of at least 32 characters for the browser's admin login. Username: `admin`. |
+| `SEEM_BOX_EXTENSION_TOKEN` | The pairing token already saved in the Chrome extension. |
+
+Use different values for the two secrets. Generate a new random value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Do not commit either secret. Local `.env.local` values and your local ChatGPT login do not automatically populate the deployed app.
+
+After these repository changes reach the connected deployment branch, Cloudflare's build deploys the code and the SQLite-backed `AuthObject` migration. No database ID needs to be created or pasted: the `SEEM_BOX_AUTH` binding and `v1` migration are declared in `wrangler.jsonc`. Keep the Worker name, object class, and binding stable across later deployments to retain the connection. Preview deployments should use a separate Worker/storage namespace if they must not share production credentials.
+
+Open `https://seem-box.waseemkn96.workers.dev/settings`, sign in to the browser prompt as `admin`, and complete a **new** device-code login. Approval is followed by token exchange and a durable save before the UI reports success. Pending flows expire after 15 minutes; successful polls are repeatable until expiry. Refreshes are serialized to avoid competing requests rotating the same refresh token.
+
+The Worker fails closed with HTTP 503 until the admin secret is configured. The extension's exact `POST /api/extension-summary` route is exempt from the browser password prompt because it checks its own Bearer token. Other dynamic pages and APIs require the admin password. Public static assets contain no credentials. This remains a single-owner app, not multi-user account storage.
+
+`SEEM_BOX_AUTH_STORAGE=cloudflare` is set by Wrangler and must not be removed in production: missing bindings produce an explicit error, never a fallback to Worker filesystem storage. Plain `npm run dev` retains local file-based auth. To preview Cloudflare locally, build with `npm run build:cloudflare`, put synthetic test secrets in ignored `.dev.vars`, then run `npm run preview:cloudflare`. The preview uses local Durable Object storage, not production storage.
+
+Auth persistence is verified with synthetic OAuth responses, including real workerd restart tests. A real OpenAI login still needs to be completed after deployment; upstream authorization, subscription, or bot-blocking failures are separate from storage.
 
 ## Local Sidecar
 
@@ -64,7 +95,7 @@ The unpacked Manifest V3 extension in `extension/` adds a **Summarize** button a
 
 The extension prefers English manual captions, then English auto-generated captions, then the first available language. If YouTube blocks the caption request, open YouTube's **Show transcript** panel and retry. You can also expand **Paste a transcript instead** in the extension panel. Summaries appear in the panel with key takeaways and a conclusion; navigating to another video clears the old result.
 
-Permissions are limited to storage, script execution, `www.youtube.com`, and `seem-box.waseemkn96.workers.dev`. The pairing token is kept in extension-only local storage, not sync storage or the YouTube page. Captions are processed only on click and go to the deployed app and its configured AI provider. Treat the pairing token as a secret; rotate it in both places if exposed. Protect the personal app's other endpoints before public exposure; the extension token protects only the extension-summary endpoint.
+Permissions are limited to storage, script execution, `www.youtube.com`, and `seem-box.waseemkn96.workers.dev`. The pairing token is kept in extension-only local storage, not sync storage or the YouTube page. Captions are processed only on click and go to the deployed app and its configured AI provider. Treat the pairing token as a secret; rotate it in both places if exposed. The extension token protects only the extension-summary endpoint; the deployed Worker's separate admin password protects the personal app's other dynamic endpoints.
 
 This is a prototype, not a published Chrome Web Store extension. YouTube player APIs, transcript DOM selectors, and caption URLs are unofficial and may change. Browser-side retrieval can still be blocked and has not been verified against a signed-in Chrome session here. Shorts, live caption streaming, language selection, and changing the server through the settings UI are not supported in this version. Closing/reloading the tab discards the UI request; backend work already started may continue. After extension code or permissions change, reload it in `chrome://extensions`, approve any permission prompts, and reload YouTube.
 
@@ -78,5 +109,11 @@ npm run lint
 npm run build
 node --test scripts/extension-check.mjs
 NODE_OPTIONS=--conditions=react-server npx tsx scripts/extension-summary-check.ts
+NODE_OPTIONS=--conditions=react-server npx tsx scripts/auth-storage-check.ts
+node scripts/auth-worker-check.mjs
+node --test scripts/admin-auth-check.mjs
+npm run build:cloudflare
+npx wrangler deploy --dry-run
+node scripts/cloudflare-app-check.mjs
 npx tsx scripts/transcript-check.ts "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
