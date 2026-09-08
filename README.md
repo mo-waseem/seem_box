@@ -35,7 +35,9 @@ The default model can change as ChatGPT's model catalog changes. Override `SEEM_
 
 ## Cloudflare Deployment
 
-Cloudflare deploys a **standalone, framework-free Worker**, not the Next.js toolbox. The entry point is `worker.js`, configured by `wrangler.jsonc`, for the existing Worker named `seem-box`. Its bundle contains no Next.js, React, OpenNext, Node filesystem access, or YouTube scraping libraries. The existing Next.js toolbox remains available locally with `npm run dev`; its optional OpenNext integration is not used by this deployment.
+Cloudflare deploys a **standalone, framework-free Worker**, not the Next.js toolbox. The entry point is `worker.js`, configured by `wrangler.jsonc`, for the existing Worker named `seem-box`. Its bundle contains no Next.js, React, OpenNext, Node filesystem access, or YouTube scraping libraries. The existing Next.js toolbox remains available locally with `npm run dev`.
+
+Cloudflare scripts explicitly pass `--config wrangler.jsonc` to avoid Wrangler's framework auto-detection. Do not restore `open-next.config.ts`: alongside the local toolbox's `next.config.ts`, it can cause a plain `wrangler deploy` to delegate to OpenNext. Dry-run builds skip this delegation, so a successful dry run alone does not detect that configuration conflict.
 
 The deployed request path is deliberately small:
 

@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cloudflare": "wrangler deploy --dry-run --outdir .worker-build",
-    "preview:cloudflare": "wrangler dev",
-    "deploy:cloudflare": "wrangler deploy",
+    "build:cloudflare": "wrangler deploy --config wrangler.jsonc --dry-run --outdir .worker-build",
+    "preview:cloudflare": "wrangler dev --config wrangler.jsonc",
+    "deploy:cloudflare": "wrangler deploy --config wrangler.jsonc",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
