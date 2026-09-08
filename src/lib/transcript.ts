@@ -52,7 +52,9 @@ export function extractVideoId(input: string): string | null {
 export async function getTranscript(input: string): Promise<Transcript> {
   const videoId = extractVideoId(input);
   if (!videoId) throw new AppError("That does not look like a YouTube video URL.", 400);
-  const yt = await Innertube.create();
+  // Captions do not need playback URL deciphering. Skip downloading and parsing
+  // YouTube's player JavaScript, which is expensive on resource-limited Workers.
+  const yt = await Innertube.create({ retrieve_player: false });
   let title = videoId;
   let author = "Unknown channel";
   let durationSeconds: number | null = null;
