@@ -19,6 +19,7 @@ export async function listCodexModels(): Promise<string[]> {
   const response = await fetch(MODELS_URL, {
     headers: requestHeaders(tokens),
   });
+  if (response.status === 403) throw await codexForbiddenError(response);
   if (!response.ok) {
     const detail = await errorDetail(response);
     throw new AppError(`Could not load ChatGPT models (HTTP ${response.status})${detail ? `: ${detail}` : "."}`, 502);
@@ -57,16 +58,43 @@ export async function codexComplete({ system, user, model = CODEX_MODEL }: { sys
     response = await requestResponses(tokens, system, user, model);
   }
   if (response.status === 403) {
-    throw new AppError(
-      "ChatGPT rejected the request (403). Your subscription may not include this feature, or a Cloudflare challenge is blocking the request. Try again or reconnect in Settings.",
-      502,
-    );
+    throw await codexForbiddenError(response);
   }
   if (!response.ok) {
     const detail = await errorDetail(response);
     throw new AppError(`ChatGPT backend error (HTTP ${response.status})${detail ? `: ${detail}` : "."}`, 502);
   }
   return readSSE(response);
+}
+
+export async function codexForbiddenError(response: Response): Promise<AppError> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const challengeHeader = response.headers.get("cf-mitigated") === "challenge";
+  let text = "";
+  try { text = await response.text(); } catch { /* Keep the HTTP failure if its body cannot be read. */ }
+  const html = contentType.includes("text/html") || /^\s*<!doctype html|^\s*<html/i.test(text);
+  const challenge = challengeHeader || (html && /cf-chl-|\/cdn-cgi\/challenge-platform\/|Just a moment|Enable JavaScript and cookies to continue/i.test(text));
+  // Do not log OAuth credentials, prompts, account IDs, or upstream response bodies.
+  console.warn("[CODEX] Upstream access denied", { status: response.status, html, challenge });
+  if (challenge) {
+    return new AppError("ChatGPT blocked this server with a browser-verification challenge (403). Device login does not clear this challenge. Use an API provider or run the backend on a host that ChatGPT accepts.", 502);
+  }
+  if (html) {
+    return new AppError("ChatGPT returned an HTML access-denied page (403), not an API response. This may be a network or security-gateway restriction; the response does not establish a subscription problem. Check the backend host's access to ChatGPT or use an API provider.", 502);
+  }
+  let detail = "";
+  try {
+    const data = JSON.parse(text) as { error?: { message?: unknown } | string; message?: unknown } | null;
+    const message = typeof data?.error === "string" ? data.error : data?.error?.message ?? data?.message;
+    if (typeof message === "string") {
+      detail = message.replace(/Bearer\s+[^\s"<>]+/gi, "Bearer [redacted]")
+        .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted]")
+        .replace(/\s+/g, " ").trim().slice(0, 400);
+    }
+  } catch { /* Never show raw HTML or unstructured gateway responses. */ }
+  return new AppError(detail
+    ? `ChatGPT denied API access (403): ${detail}`
+    : "ChatGPT denied this server's API request (403) without an explanation. Login succeeded far enough to attempt the request, but account, model, or server-network access may still be restricted. Reconnecting is not a guaranteed fix.", 502);
 }
 
 async function requireTokens(): Promise<CodexTokens> {
