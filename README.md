@@ -35,7 +35,21 @@ The default model can change as ChatGPT's model catalog changes. Override `SEEM_
 
 ## Cloudflare Deployment
 
-The repository includes the OpenNext adapter, `open-next.config.ts`, a custom `worker.js`, and `wrangler.jsonc` for the existing Worker named `seem-box`. The custom Worker exports the authentication Durable Object and protects the personal app with HTTP Basic authentication. Do not replace its entry point with `.open-next/worker.js`, which would bypass those protections and omit the object export.
+Cloudflare deploys a **standalone, framework-free Worker**, not the Next.js toolbox. The entry point is `worker.js`, configured by `wrangler.jsonc`, for the existing Worker named `seem-box`. Its bundle contains no Next.js, React, OpenNext, Node filesystem access, or YouTube scraping libraries. The existing Next.js toolbox remains available locally with `npm run dev`; its optional OpenNext integration is not used by this deployment.
+
+The deployed request path is deliberately small:
+
+```text
+YouTube captions in the browser
+  -> Extension sends transcript text
+  -> Worker authenticates and validates the request
+  -> GPT request (using the configured model directly)
+  -> Structured summary returned to the extension
+```
+
+The usual short-transcript path makes one GPT generation request, plus a token read from the Durable Object when using ChatGPT. Expired credentials require a refresh. Long transcripts still use bounded chunk summaries before the final combined summary. No model-catalog lookup or YouTube request is made by the Worker.
+
+`/settings` serves a small static HTML/JavaScript device-login interface instead of server-rendered React. `/api/extension-summary` keeps the existing extension contract. `/api/youtube-summary` returns HTTP 410 with instructions to use browser-side captions; server-side URL scraping remains a local-toolbox feature only. The root and former `/youtube-summary` page show the new setup page. Do not change the Worker entry point back to `.open-next/worker.js`.
 
 For the connected GitHub repository, configure the Worker's **Settings > Build** commands:
 
@@ -54,13 +68,17 @@ Under the Worker's **Settings > Variables and Secrets**, add these as encrypted 
 
 Use different values for the two secrets. Generate a new random value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Do not commit either secret. Local `.env.local` values and your local ChatGPT login do not automatically populate the deployed app.
 
-After these repository changes reach the connected deployment branch, Cloudflare's build deploys the code and the SQLite-backed `AuthObject` migration. No database ID needs to be created or pasted: the `SEEM_BOX_AUTH` binding and `v1` migration are declared in `wrangler.jsonc`. Keep the Worker name, object class, and binding stable across later deployments to retain the connection. Preview deployments should use a separate Worker/storage namespace if they must not share production credentials.
+After these repository changes reach the connected deployment branch, Cloudflare's build bundles the standalone Worker and deployment applies the SQLite-backed `AuthObject` migration. No database ID needs to be created or pasted: the `SEEM_BOX_AUTH` binding and `v1` migration are declared in `wrangler.jsonc`. The lightweight deployment preserves the existing Worker name, object class, binding, named object (`owner`), and stored keys, so already-saved logins remain available. Do not recreate or rename the namespace. Preview deployments should use a separate Worker/storage namespace if they must not share production credentials.
 
 Open `https://seem-box.waseemkn96.workers.dev/settings`, sign in to the browser prompt as `admin`, and complete a **new** device-code login. Approval is followed by token exchange and a durable save before the UI reports success. Pending flows expire after 15 minutes; successful polls are repeatable until expiry. Refreshes are serialized to avoid competing requests rotating the same refresh token.
 
-The Worker fails closed with HTTP 503 until the admin secret is configured. The extension's exact `POST /api/extension-summary` route is exempt from the browser password prompt because it checks its own Bearer token. Other dynamic pages and APIs require the admin password. Public static assets contain no credentials. This remains a single-owner app, not multi-user account storage.
+The Worker fails closed with HTTP 503 until the admin secret is configured. The extension's exact `POST /api/extension-summary` route is exempt from the browser password prompt because it checks its own Bearer token. All other routes, including the setup page and its JavaScript, require the admin password. This remains a single-owner app, not multi-user account storage.
 
-`SEEM_BOX_AUTH_STORAGE=cloudflare` is set by Wrangler and must not be removed in production: missing bindings produce an explicit error, never a fallback to Worker filesystem storage. Plain `npm run dev` retains local file-based auth. To preview Cloudflare locally, build with `npm run build:cloudflare`, put synthetic test secrets in ignored `.dev.vars`, then run `npm run preview:cloudflare`. The preview uses local Durable Object storage, not production storage.
+The Worker accesses the Durable Object directly and never falls back to filesystem storage. `SEEM_BOX_AUTH_STORAGE` is no longer needed for this entry point. Plain `npm run dev` retains local file-based auth. To preview Cloudflare locally, put synthetic test secrets in ignored `.dev.vars`, then run `npm run preview:cloudflare`. Wrangler bundles directly; no Next.js build is required. The preview uses local Durable Object storage, not production storage.
+
+The configured GPT model is `SEEM_BOX_CODEX_MODEL` (default `gpt-5.4`). For an OpenAI-compatible API instead, set `SEEM_BOX_LLM_PROVIDER=compat`, `SEEM_BOX_COMPAT_BASE_URL` to a remote HTTPS origin (the Worker appends `/v1/chat/completions`), `SEEM_BOX_COMPAT_MODEL`, and the `SEEM_BOX_COMPAT_API_KEY` secret as needed. Requests do not follow provider redirects. There is no automatic paid-provider fallback.
+
+The Worker bundle is approximately 49 KiB rather than the previous ~6 MiB Next.js deployment. This removes the major unnecessary CPU work, but bundle size is not a CPU benchmark: Workers Free still allows only 10 ms of CPU per request. Validate real invocation CPU usage in Cloudflare Logs, especially for large transcripts. Tests using local workerd do not enforce the production free-plan CPU quota. Network wait time is not CPU time. ChatGPT 403/account or browser-challenge restrictions are independent and are not bypassed by this redesign.
 
 Auth persistence is verified with synthetic OAuth responses, including real workerd restart tests. A real OpenAI login still needs to be completed after deployment; upstream authorization, subscription, or bot-blocking failures are separate from storage.
 
@@ -112,6 +130,9 @@ NODE_OPTIONS=--conditions=react-server npx tsx scripts/extension-summary-check.t
 NODE_OPTIONS=--conditions=react-server npx tsx scripts/auth-storage-check.ts
 node scripts/auth-worker-check.mjs
 node --test scripts/admin-auth-check.mjs
+npx tsx scripts/worker-summary-check.ts
+npx tsx scripts/extension-handler-check.ts
+node scripts/standalone-worker-check.mjs
 npm run build:cloudflare
 npx wrangler deploy --dry-run
 node scripts/cloudflare-app-check.mjs

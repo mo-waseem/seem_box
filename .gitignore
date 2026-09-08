@@ -17,6 +17,7 @@
 /.next/
 /.open-next/
 /.wrangler/
+/.worker-build/
 .dev.vars*
 /out/
 

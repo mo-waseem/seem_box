@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="referrer" content="no-referrer">
+    <title>Settings | Youtube AI Summary</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0a0a0a; color: #ededed; }
+      * { box-sizing: border-box; }
+      body { margin: 0; line-height: 1.6; }
+      a { color: #bef264; text-underline-offset: 4px; overflow-wrap: anywhere; }
+      a:hover { color: #d9f99d; }
+      :focus-visible { outline: 2px solid #bef264; outline-offset: 5px; }
+      .shell { max-width: 860px; margin: auto; padding: 0 24px; }
+      header { border-bottom: 1px solid #262626; }
+      header .shell { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 88px; }
+      .brand { font-size: 17px; font-weight: 650; letter-spacing: -.03em; }
+      .brand::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 12px; background: #bef264; border-radius: 2px; }
+      header a { font-size: 13px; }
+      main { padding-top: 56px !important; padding-bottom: 56px !important; }
+      .eyebrow { color: #bef264; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+      h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.2; letter-spacing: -.045em; margin: 12px 0 16px; }
+      h2 { font-size: 17px; font-weight: 600; margin: 0; }
+      p { margin: 8px 0 0; }
+      .intro { max-width: 640px; color: #a3a3a3; margin-bottom: 32px; }
+      .card { border: 1px solid #292929; border-radius: 12px; background: #141414; padding: 24px; margin-top: 16px; }
+      .card-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; flex-wrap: wrap; }
+      .muted { color: #a3a3a3; font-size: 14px; }
+      .badge { border: 1px solid #404040; border-radius: 100px; padding: 4px 10px; color: #a3a3a3; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+      .badge[data-connected="true"] { color: #bef264; border-color: #466023; background: #1c2513; }
+      button { min-height: 44px; border: 1px solid #bef264; border-radius: 7px; padding: 10px 18px; margin-top: 22px; font: inherit; font-size: 14px; font-weight: 600; background: #bef264; color: #171717; cursor: pointer; }
+      button:hover:not(:disabled) { background: #d9f99d; }
+      button:disabled { opacity: .55; cursor: wait; }
+      .device { margin-top: 22px; background: #0a0a0a; padding: 20px; border: 1px solid #404040; border-radius: 8px; }
+      .code { display: block; font-family: ui-monospace, monospace; font-size: clamp(22px, 5vw, 30px); letter-spacing: .15em; margin: 14px 0; overflow-wrap: anywhere; user-select: all; }
+      .feedback { font-size: 14px; color: #d4d4d4; }
+      .feedback:not(:empty) { margin-top: 18px; padding-left: 12px; border-left: 2px solid #737373; }
+      .feedback[data-kind="error"] { color: #fca5a5; border-color: #f87171; }
+      .feedback[data-kind="success"] { color: #bef264; border-color: #bef264; }
+      dl { margin: 16px 0 0; display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px 16px; font-size: 14px; }
+      dt { color: #a3a3a3; }
+      dd { margin: 0; overflow-wrap: anywhere; }
+      ol { padding-left: 20px; color: #a3a3a3; font-size: 14px; }
+      li { padding-left: 4px; margin: 10px 0; }
+      code { color: #e5e5e5; }
+      footer { margin-top: 28px; font-size: 12px; color: #a3a3a3; }
+      [hidden] { display: none !important; }
+      @media (max-width: 480px) { .shell { padding: 0 18px; } .card { padding: 20px; } header .shell { flex-wrap: wrap; gap: 4px; padding-top: 18px; padding-bottom: 18px; } main { padding-top: 36px !important; } }
+    </style>
+    <script type="module" src="/settings.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="shell">
+        <span class="brand">Youtube AI Summary</span>
+        <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">Open YouTube <span class="muted">(new tab)</span></a>
+      </div>
+    </header>
+    <main class="shell">
+      <div class="eyebrow">Extension backend / Settings</div>
+      <h1>Connect your AI.</h1>
+      <p class="intro">Your extension reads YouTube captions in your browser and sends transcript text here for summarization. This lightweight Worker handles the AI request, not server-side YouTube scraping. YouTube cookies stay in your browser.</p>
+      <section class="card" aria-labelledby="connection-title">
+        <div class="card-heading">
+          <div>
+            <h2 id="connection-title">ChatGPT connection</h2>
+            <p class="muted">Connect your Plus / Pro subscription using OpenAI's device-code login.</p>
+          </div>
+          <span id="connection-badge" class="badge" role="status">Checking...</span>
+        </div>
+        <button id="connect" type="button" disabled>Connect via device code</button>
+        <div id="device" class="device" hidden>
+          <p>Open <a id="verification-link" href="https://auth.openai.com/codex/device" target="_blank" rel="noopener noreferrer">auth.openai.com/codex/device (new tab)</a> and enter this code:</p>
+          <code id="user-code" class="code" aria-label="Device verification code"></code>
+          <p class="muted">Keep this page open. Waiting for approval; this request expires within 15 minutes.</p>
+        </div>
+        <p id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+        <noscript><p class="feedback">Enable JavaScript to check your connection and start device login.</p></noscript>
+      </section>
+      <section class="card" aria-labelledby="provider-title">
+        <h2 id="provider-title">Active configuration</h2>
+        <dl>
+          <dt>Provider</dt><dd id="provider">Checking...</dd>
+          <dt>Model</dt><dd id="model">Checking...</dd>
+        </dl>
+        <p class="muted">Provider and default model are configured on the Worker, not in this page.</p>
+      </section>
+      <section class="card" aria-labelledby="extension-title">
+        <h2 id="extension-title">Use it on YouTube</h2>
+        <p class="muted">Install the preview extension using the project's README, under Chrome Extension (Preview).</p>
+        <ol>
+          <li>In Chrome 120 or newer, open <code>chrome://extensions</code> and enable Developer mode.</li>
+          <li>Choose <strong>Load unpacked</strong> and select the project's <code>extension</code> folder.</li>
+          <li>Pair the extension in its toolbar popup using the deployment's extension token, as described in the README. It is separate from this page's browser login.</li>
+          <li>Reload YouTube, open a video, and choose <strong>Summarize</strong>, then <strong>Summarize Video</strong>.</li>
+        </ol>
+        <p class="muted">If captions are blocked, open YouTube's Show transcript panel and retry, or paste a transcript in the extension.</p>
+      </section>
+      <footer>This page is protected by the Worker's browser sign-in. No provider keys or extension tokens are entered here.</footer>
+    </main>
+  </body>
+</html>

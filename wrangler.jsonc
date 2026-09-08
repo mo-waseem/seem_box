@@ -3,10 +3,9 @@
   "name": "seem-box",
   "main": "worker.js",
   "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
-  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "seem-box" }],
-  "vars": { "SEEM_BOX_AUTH_STORAGE": "cloudflare", "SEEM_BOX_LLM_PROVIDER": "codex" },
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "rules": [{ "type": "Text", "globs": ["**/settings.html", "**/settings.js"], "fallthrough": true }],
+  "vars": { "SEEM_BOX_LLM_PROVIDER": "codex" },
   "durable_objects": {
     "bindings": [{ "name": "SEEM_BOX_AUTH", "class_name": "AuthObject" }]
   },

@@ -1,4 +1,5 @@
-// Run after npm run build:cloudflare. Uses isolated local storage and synthetic secrets.
+// Run: node scripts/cloudflare-app-check.mjs. Wrangler bundles the root Worker;
+// no Next/OpenNext build is required. Uses isolated storage and synthetic secrets.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
