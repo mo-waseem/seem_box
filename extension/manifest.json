@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "minimum_chrome_version": "120",
-  "name": "Youtube AI Summary",
+  "name": "__MSG_appName__",
+  "default_locale": "en",
   "version": "0.1.0",
-  "description": "A simple extension for AI summaries and key takeaways, right on YouTube. Just what you need, nothing extra.",
+  "description": "__MSG_appDesc__",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -11,10 +12,10 @@
     "128": "icons/icon-128.png"
   },
   "permissions": ["scripting", "storage"],
-  "host_permissions": ["https://www.youtube.com/*", "https://seem-box.waseemkn96.workers.dev/*"],
+  "host_permissions": ["https://www.youtube.com/*", "http://localhost/*"],
   "background": { "service_worker": "background.js" },
   "action": {
-    "default_title": "Youtube AI Summary",
+    "default_title": "__MSG_appName__",
     "default_popup": "options.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -24,7 +25,7 @@
   "options_page": "options.html",
   "content_scripts": [{
     "matches": ["https://www.youtube.com/*"],
-    "js": ["content.js"],
+    "js": ["config.js", "i18n.js", "transcript.js", "content.js"],
     "run_at": "document_idle"
   }]
 }

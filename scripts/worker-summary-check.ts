@@ -32,7 +32,7 @@ async function main() {
       assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer fake-refreshed");
       return new Response(delta(JSON.stringify(structured)));
     };
-    assert.deepEqual(await summarizeForWorker(input, env, signal()), { ...structured, provider: "codex", model: "gpt-5.4" });
+    assert.deepEqual(await summarizeForWorker(input, env, signal()), { ...structured, provider: "codex", model: "gpt-5.4", language: "en" });
     assert.deepEqual(operations.map((op) => op.op), ["read", "refresh"]);
     assert.equal(calls, 2);
     operations.length = 0;
@@ -60,7 +60,8 @@ async function main() {
       assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer fake-key");
       return Response.json({ choices: [{ message: { content: JSON.stringify(structured) } }] });
     };
-    assert.deepEqual(await summarizeForWorker(input, compat, signal()), { ...structured, provider: "compat", model: "gpt-4o-mini" });
+    assert.deepEqual(await summarizeForWorker(input, compat, signal()), { ...structured, provider: "compat", model: "gpt-4o-mini", language: "en" });
+    assert.deepEqual(await summarizeForWorker({ ...input, language: "ar" }, compat, signal()), { ...structured, provider: "compat", model: "gpt-4o-mini", language: "ar" });
     for (const base of ["http://api.example.test", "https://127.1", "https://[::1]", "https://localhost", "https://user:pass@example.test"]) {
       await assert.rejects(summarizeForWorker(input, { ...compat, SEEM_BOX_COMPAT_BASE_URL: base }, signal()), /remote HTTPS/);
     }

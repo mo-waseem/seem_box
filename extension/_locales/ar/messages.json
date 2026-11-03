@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "ملخص يوتيوب بالذكاء الاصطناعي",
+    "description": "Extension name shown in the toolbar and Chrome settings."
+  },
+  "appDesc": {
+    "message": "إضافة بسيطة لملخصات الذكاء الاصطناعي وأهم النقاط مباشرة على يوتيوب. كل ما تحتاجه فقط.",
+    "description": "Extension description shown in Chrome settings."
+  }
+}

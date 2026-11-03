@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Youtube AI Summary",
+    "description": "Extension name shown in the toolbar and Chrome settings."
+  },
+  "appDesc": {
+    "message": "A simple extension for AI summaries and key takeaways, right on YouTube. Just what you need, nothing extra.",
+    "description": "Extension description shown in Chrome settings."
+  }
+}

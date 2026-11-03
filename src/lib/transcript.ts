@@ -1,5 +1,6 @@
 import { Innertube } from "youtubei.js";
 import { AppError } from "./errors";
+import { normalizeLanguage } from "./llm/summary-core";
 
 export type Transcript = {
   videoId: string;
@@ -49,9 +50,10 @@ export function extractVideoId(input: string): string | null {
   return null;
 }
 
-export async function getTranscript(input: string): Promise<Transcript> {
+export async function getTranscript(input: string, language: unknown = "en"): Promise<Transcript> {
   const videoId = extractVideoId(input);
   if (!videoId) throw new AppError("That does not look like a YouTube video URL.", 400);
+  const captionLanguage = normalizeLanguage(language);
   // Captions do not need playback URL deciphering. Skip downloading and parsing
   // YouTube's player JavaScript, which is expensive on resource-limited Workers.
   const yt = await Innertube.create({ retrieve_player: false });
@@ -71,19 +73,25 @@ export async function getTranscript(input: string): Promise<Transcript> {
     author = metadata?.author ?? author;
   }
   let text = "";
-  let language: string | null = null;
+  let transcriptLanguage: string | null = null;
+  if (captionLanguage !== "en") {
+    // The primary innertube transcript has no language selection, so try the
+    // requested language first and fall through to the default pipeline below.
+    const preferred = await fallbackTranscript(videoId, captionLanguage);
+    if (preferred) return { videoId, title, author, durationSeconds, language: captionLanguage, text: preferred };
+  }
   if (info) {
     try {
       const primary = await innertubeTranscript(info);
       text = primary.text;
-      language = primary.language;
+      transcriptLanguage = primary.language;
     } catch {
       text = "";
     }
   }
   if (!text) text = await fallbackTranscript(videoId);
   if (!text) throw new AppError("No subtitles or captions are available for this video.", 404);
-  return { videoId, title, author, durationSeconds, language, text };
+  return { videoId, title, author, durationSeconds, language: transcriptLanguage, text };
 }
 
 async function fallbackMetadata(videoId: string): Promise<{ title: string; author: string } | null> {
@@ -110,14 +118,14 @@ async function innertubeTranscript(info: MediaInfo): Promise<{ text: string; lan
   return { text, language: transcriptInfo?.selectedLanguage ?? null };
 }
 
-async function fallbackTranscript(videoId: string): Promise<string> {
+async function fallbackTranscript(videoId: string, lang?: string): Promise<string> {
   try {
     const mod = (await import("youtube-transcript")) as unknown as {
-      YoutubeTranscript?: { fetchTranscript: (id: string) => Promise<{ text: string }[]> };
+      YoutubeTranscript?: { fetchTranscript: (id: string, config?: { lang?: string }) => Promise<{ text: string }[]> };
     };
     const api = mod.YoutubeTranscript;
     if (!api) return "";
-    const items = await api.fetchTranscript(videoId);
+    const items = await api.fetchTranscript(videoId, lang ? { lang } : undefined);
     return items
       .map((item) => decodeEntities(item.text))
       .join(" ")

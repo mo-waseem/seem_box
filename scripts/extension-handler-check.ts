@@ -19,7 +19,7 @@ async function main() {
   let calls = 0;
   const summarize = async (value: typeof input, signal: AbortSignal) => {
     calls++;
-    assert.deepEqual(value, { ...input, transcript: input.transcript.trim() });
+    assert.deepEqual(value, { ...input, transcript: input.transcript.trim(), language: "en" });
     assert.equal(signal.aborted, false);
     return { summary: "Summary" };
   };
@@ -57,7 +57,7 @@ async function main() {
         let reject!: (reason: unknown) => void;
         const pending = new Promise<unknown>((yes, no) => { resolve = yes; reject = no; });
         const response = await handleExtensionSummary(req, token, async (value, combined) => {
-          assert.deepEqual(value, { ...input, transcript: input.transcript.trim() });
+          assert.deepEqual(value, { ...input, transcript: input.transcript.trim(), language: "en" });
           signal = combined;
           return pending;
         });

@@ -10,6 +10,9 @@ const captionUrl = "https://www.youtube.com/api/timedtext?v=abcdefghijk";
 const sender = { id: "extension-id", tab: { id: 42 }, url: `https://www.youtube.com/watch?v=${videoId}` };
 const payload = { videoId, title: "Example", author: "Channel", transcript: "Hello world" };
 const plain = (value) => JSON.parse(JSON.stringify(value));
+const legacyPanelSelector = 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]';
+const panelSelector = 'ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]:is([target-id="engagement-panel-searchable-transcript"], [target-id="PAmodern_transcript_view"], :has(transcript-segment-view-model))';
+const textSelector = 'ytd-transcript-segment-renderer .segment-text, transcript-segment-view-model > span.ytAttributedStringHost';
 
 function harness(options = {}) {
   const calls = { access: [], storage: [], scripts: [], captions: [], backend: [], selectors: [], timeouts: [] };
@@ -29,10 +32,13 @@ function harness(options = {}) {
       },
       querySelector(selector) {
         calls.selectors.push(selector);
-        assert.equal(selector, 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]');
+        assert.ok([legacyPanelSelector, panelSelector].includes(selector));
+        if (options.modernPanel && selector === legacyPanelSelector) return null;
+        if (options.hiddenPanel) return null;
         return options.panel ? {
           querySelectorAll(segmentSelector) {
-            assert.equal(segmentSelector, "ytd-transcript-segment-renderer .segment-text");
+            assert.ok(["ytd-transcript-segment-renderer .segment-text", textSelector].includes(segmentSelector));
+            if (options.modernPanel && segmentSelector !== textSelector) return [];
             return options.panel.map((textContent) => ({ textContent }));
           },
         } : null;
@@ -50,6 +56,8 @@ function harness(options = {}) {
     },
   });
   vm.runInNewContext(source, {
+    SEEM_BOX_EXTENSION_URL: options.serverUrl ?? "http://localhost:3000",
+    importScripts(file) { assert.equal(file, "config.js"); },
     URL,
     setInterval,
     clearInterval,
@@ -111,7 +119,7 @@ test("JSON3 joins segments without inserting spaces, joins events, and normalize
   assert.deepEqual(plain(injection.target), { tabId: 42 });
   assert.equal(injection.world, "MAIN");
   assert.equal(typeof injection.func, "function");
-  assert.deepEqual(plain(injection.args), [videoId]);
+  assert.deepEqual(plain(injection.args), [videoId, "en"]);
   assert.equal(JSON.stringify(injection).includes(token), false);
   assert.equal(h.calls.captions.length, 1);
   const request = h.calls.captions[0];
@@ -120,6 +128,32 @@ test("JSON3 joins segments without inserting spaces, joins events, and normalize
   assert.equal(request.init.credentials, "include");
   assert.equal(request.init.signal.timeout, 20000);
   assert.equal(h.calls.backend.length, 0);
+});
+
+test("caption track follows the requested language, falling back to English", async () => {
+  const tracks = [
+    { languageCode: "en", kind: "asr", baseUrl: `${captionUrl}&kind=asr` },
+    { languageCode: "en", baseUrl: `${captionUrl}&lang=en` },
+    { languageCode: "ar", kind: "asr", baseUrl: `${captionUrl}&lang=ar&kind=asr` },
+    { languageCode: "ar-SA", baseUrl: `${captionUrl}&lang=ar-SA` },
+  ];
+  const arabic = harness({ tracks });
+  await arabic.send({ type: "READ_CAPTIONS", videoId, language: "ar" });
+  assert.equal(arabic.calls.captions.length, 1);
+  assert.equal(new URL(arabic.calls.captions[0].url).searchParams.get("lang"), "ar-SA");
+  const english = harness({ tracks });
+  await english.send({ type: "READ_CAPTIONS", videoId, language: "en" });
+  assert.equal(new URL(english.calls.captions[0].url).searchParams.get("lang"), "en");
+  const fallback = harness({ tracks: [{ languageCode: "en", baseUrl: `${captionUrl}&lang=en` }] });
+  await fallback.send({ type: "READ_CAPTIONS", videoId, language: "ar" });
+  assert.equal(new URL(fallback.calls.captions[0].url).searchParams.get("lang"), "en");
+});
+
+test("unsupported caption languages are rejected before touching the player", async () => {
+  const h = harness();
+  assert.match((await h.send({ type: "READ_CAPTIONS", videoId, language: "fr" })).error, /Invalid language/);
+  assert.equal(h.calls.scripts.length, 0);
+  assert.equal(h.calls.captions.length, 0);
 });
 
 for (const raw of ["", '{"events":[]}', '{"events":[{"segs":[{"utf8":" \\n "}]}]}', "unsupported data"]) {
@@ -149,6 +183,18 @@ for (const options of [{ tracks: [] }, { captionStatus: 403 }, { raw: "" }, { ca
     assert.equal(h.calls.selectors.length, 1);
   });
 }
+
+test("reads modern transcript text without a target-id, excluding timestamps", async () => {
+  // Live Chrome layout on 7MKIFXwU2Og: expanded panel has no target-id;
+  // transcript-segment-view-model has timestamp divs and a direct attributed-text span.
+  const h = harness({ raw: "", modernPanel: true, panel: [" مرحبا بالعالم\n", " هذا نص الفيديو "] });
+  assert.deepEqual(await h.send(), { ...payload, transcript: "مرحبا بالعالم هذا نص الفيديو" });
+});
+
+test("does not read a hidden modern transcript panel", async () => {
+  const h = harness({ raw: "", modernPanel: true, hiddenPanel: true, panel: ["Stale text"] });
+  assert.match((await h.send()).error, /empty or unsupported caption data/);
+});
 
 for (const baseUrl of [
   "https://evil.example/api/timedtext",
@@ -213,7 +259,7 @@ test("summary waits for storage protection and authenticates only the backend re
   assert.equal(h.calls.scripts.length, 0);
   assert.equal(h.calls.backend.length, 1);
   const request = h.calls.backend[0];
-  assert.equal(request.url, "https://seem-box.waseemkn96.workers.dev/api/extension-summary");
+  assert.equal(request.url, "http://localhost:3000/api/extension-summary");
   assert.equal(request.init.method, "POST");
   assert.deepEqual(plain(request.init.headers), { "Content-Type": "application/json", Authorization: `Bearer ${token}` });
   assert.deepEqual(JSON.parse(request.init.body), payload);
@@ -223,7 +269,7 @@ test("summary waits for storage protection and authenticates only the backend re
 
 for (const [options, expected] of [
   [{ token: "" }, /toolbar icon.*pairing token/],
-  [{ backendError: new Error("fetch failed") }, /Cannot reach seem_box.*https:\/\/seem-box\.waseemkn96\.workers\.dev/],
+  [{ backendError: new Error("fetch failed") }, /Cannot reach seem_box.*http:\/\/localhost:3000/],
   [{ backendError: Object.assign(new Error("expired"), { name: "TimeoutError" }) }, /timed out.*shorter transcript/],
   [{ backendStatus: 401, backendData: { error: "Invalid pairing token" } }, /Invalid pairing token/],
   [{ backendStatus: 503, backendData: {} }, /Summary failed \(503\)/],
@@ -237,6 +283,15 @@ for (const [options, expected] of [
     if (options.token === "") assert.equal(h.calls.backend.length, 0);
   });
 }
+
+test("summary requests and connection errors use the configured server", async () => {
+  const serverUrl = "https://summary.example.test:8443";
+  const h = harness({ serverUrl });
+  await h.send({ type: "SUMMARIZE", videoId, payload });
+  assert.equal(h.calls.backend[0].url, `${serverUrl}/api/extension-summary`);
+  const failed = harness({ serverUrl, backendError: new Error("fetch failed") });
+  assert.ok((await failed.send({ type: "SUMMARIZE", videoId, payload })).error.includes(serverUrl));
+});
 
 test("invalid messages and untrusted senders cannot trigger work", () => {
   const h = harness();

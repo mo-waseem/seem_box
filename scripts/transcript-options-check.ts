@@ -33,6 +33,13 @@ async function main() {
       language: "English", text: "Hello world.",
     });
     assert.equal(created, 1);
+    // Arabic captions are unavailable for this stub video, so an "ar" request
+    // must fall back to the default pipeline instead of failing.
+    assert.deepEqual(await getTranscript("https://youtu.be/abcdefghijk", "ar"), {
+      videoId: "abcdefghijk", title: "Example", author: "Channel", durationSeconds: 120,
+      language: "English", text: "Hello world.",
+    });
+    assert.equal(created, 2);
     console.log("Transcript checks passed: skips playback JS while preserving metadata and caption extraction.");
   } finally {
     Innertube.create = originalCreate;

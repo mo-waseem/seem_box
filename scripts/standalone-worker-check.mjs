@@ -239,7 +239,7 @@ async function main() {
     const compatResult = await json(response);
     // Keep running independent Codex/persistence checks if compat regresses.
     try {
-      assert.deepEqual(compatResult, { ...structured, provider: "compat", model: "gpt-4o-mini" });
+      assert.deepEqual(compatResult, { ...structured, provider: "compat", model: "gpt-4o-mini", language: "en" });
       assert.deepEqual(counts, { compat: 1, start: 0, poll: 0, exchange: 0, codex: 0, unexpected: 0 });
     } catch (error) { compatFailure = error; }
     checks++;
@@ -268,7 +268,7 @@ async function main() {
     checks++;
 
     stage = "Codex SSE and structured upstream 403";
-    assert.deepEqual(await json(await summary()), { ...structured, provider: "codex", model: "gpt-5.4" });
+    assert.deepEqual(await json(await summary()), { ...structured, provider: "codex", model: "gpt-5.4", language: "en" });
     mode = "forbidden";
     const denied = await json(await summary());
     assert.deepEqual(denied, { error: "ChatGPT denied API access (403): Test policy denied API access." });
@@ -302,7 +302,7 @@ async function main() {
     assert.equal(after.codex.loggedIn, true);
     assert.equal(after.provider, "codex");
     assert.deepEqual(await json(await call(pollPath)), { status: "success" });
-    assert.deepEqual(await json(await summary()), { ...structured, provider: "codex", model: "gpt-5.4" });
+    assert.deepEqual(await json(await summary()), { ...structured, provider: "codex", model: "gpt-5.4", language: "en" });
     assert.equal(counts.start, 1);
     assert.equal(counts.poll, 2);
     assert.equal(counts.exchange, 1);

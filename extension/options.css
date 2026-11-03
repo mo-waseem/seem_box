@@ -5,3 +5,10 @@ small, form p { color: #b6bbab; }
 input { box-sizing: border-box; width: 100%; padding: 10px; margin: 8px 0 16px; color: inherit; background: #10120e; border: 1px solid #55574e; border-radius: 6px; }
 button { padding: 10px 16px; background: #d2ee91; color: #1c2412; font: inherit; font-weight: 650; border: 0; border-radius: 8px; cursor: pointer; }
 :focus-visible { outline: 2px solid #d2ee91; outline-offset: 3px; }
+.top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.top-row h1 { margin: 0; }
+.lang-picker { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #b6bbab; flex: none; }
+.lang-picker select { background: #10120e; color: inherit; border: 1px solid #55574e; border-radius: 6px; padding: 6px 8px; font: inherit; }
+[dir="rtl"] { text-align: right; }
+[dir="rtl"] input { text-align: right; }
+code { direction: ltr; unicode-bidi: embed; }

@@ -1,9 +1,11 @@
-/* global chrome */
+/* global chrome, importScripts */
+
+importScripts("config.js");
 
 // Keep the pairing token out of content scripts and the YouTube page.
 const storageReady = chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 
-async function readCaptions(videoId) {
+async function readCaptions(videoId, language) {
   try {
     if (new URL(location.href).searchParams.get("v") !== videoId) {
       throw new Error("The video changed. Please try again.");
@@ -19,7 +21,14 @@ async function readCaptions(videoId) {
       author: String(response.videoDetails.author || "Unknown channel").slice(0, 300),
     };
     const tracks = response.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
-    const track = tracks.find((item) => item.languageCode === "en" && item.kind !== "asr")
+    // Inlined (not a shared helper): this function is serialized into the
+    // YouTube page, where the service worker's scope is unavailable.
+    const preferred = language === "ar" ? "ar" : "en";
+    // "ar-SA" style codes still match a bare "ar" preference; English is the fallback.
+    const baseCode = (code) => String(code || "").split(/[-_]/)[0].toLowerCase();
+    const track = tracks.find((item) => baseCode(item.languageCode) === preferred && item.kind !== "asr")
+      || tracks.find((item) => baseCode(item.languageCode) === preferred)
+      || tracks.find((item) => item.languageCode === "en" && item.kind !== "asr")
       || tracks.find((item) => item.languageCode === "en") || tracks[0];
     let failure = "No caption tracks were exposed by this video.";
     if (track?.baseUrl) {
@@ -50,8 +59,9 @@ async function readCaptions(videoId) {
       }
     }
     // An already-open transcript is a fallback when timedtext requests are blocked.
-    const panel = document.querySelector('ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"][visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]');
-    const transcript = [...(panel?.querySelectorAll("ytd-transcript-segment-renderer .segment-text") || [])]
+    // Modern YouTube panels may omit target-id and use transcript-segment-view-model.
+    const panel = document.querySelector('ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]:is([target-id="engagement-panel-searchable-transcript"], [target-id="PAmodern_transcript_view"], :has(transcript-segment-view-model))');
+    const transcript = [...(panel?.querySelectorAll("ytd-transcript-segment-renderer .segment-text, transcript-segment-view-model > span.ytAttributedStringHost") || [])]
       .map((node) => node.textContent).join(" ").replace(/\s+/g, " ").trim();
     if (transcript) return { ...metadata, transcript };
     throw new Error(`${failure} Open YouTube's Show transcript panel and retry, or paste the transcript below.`);
@@ -62,6 +72,19 @@ async function readCaptions(videoId) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || !sender.tab?.id || !sender.url?.startsWith("https://www.youtube.com/")) return;
+  if (message?.type === "GET_UI_LANG" || message?.type === "SET_UI_LANG") {
+    (async () => {
+      await storageReady;
+      if (message.type === "SET_UI_LANG") {
+        if (message.uiLang !== "en" && message.uiLang !== "ar") throw new Error("Invalid language (supported: en, ar).");
+        await chrome.storage.local.set({ uiLang: message.uiLang });
+        return { uiLang: message.uiLang };
+      }
+      const { uiLang } = await chrome.storage.local.get("uiLang");
+      return { uiLang: uiLang === "ar" ? "ar" : "en" };
+    })().then(sendResponse, (error) => sendResponse({ error: error.message || "Unexpected extension error." }));
+    return true;
+  }
   if (message?.type !== "READ_CAPTIONS" && message?.type !== "SUMMARIZE") return;
   // Extension API activity keeps the worker alive while a long summary streams.
   const keepAlive = setInterval(() => { void chrome.runtime.getPlatformInfo().catch(() => {}); }, 20000);
@@ -69,11 +92,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     await storageReady;
     if (!/^[a-zA-Z0-9_-]{11}$/.test(message.videoId || "")) throw new Error("Open a YouTube watch page first.");
     if (message.type === "READ_CAPTIONS") {
+      const language = message.language === undefined ? "en" : message.language;
+      if (language !== "en" && language !== "ar") throw new Error("Invalid language (supported: en, ar).");
       const [execution] = await chrome.scripting.executeScript({
         target: { tabId: sender.tab.id },
         world: "MAIN",
         func: readCaptions,
-        args: [message.videoId],
+        args: [message.videoId, language],
       });
       if (!execution?.result) throw new Error("Could not access the YouTube player. Reload the page and retry.");
       return execution.result;
@@ -84,9 +109,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (payload?.videoId !== message.videoId || typeof payload.transcript !== "string" || payload.transcript.length > 500000) {
       throw new Error("Invalid transcript or transcript exceeds 500,000 characters.");
     }
+    if (payload.language !== undefined && payload.language !== "en" && payload.language !== "ar") {
+      throw new Error("Invalid language (supported: en, ar).");
+    }
     let response;
     try {
-      response = await fetch("https://seem-box.waseemkn96.workers.dev/api/extension-summary", {
+      response = await fetch(`${globalThis.SEEM_BOX_EXTENSION_URL}/api/extension-summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
@@ -95,7 +123,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (error) {
       throw new Error(error.name === "TimeoutError"
         ? "Summarizing timed out. Try a shorter transcript."
-        : "Cannot reach seem_box at https://seem-box.waseemkn96.workers.dev. Check your connection and that the server is available.");
+        : `Cannot reach seem_box at ${globalThis.SEEM_BOX_EXTENSION_URL}. Make sure the configured server is running and try again.`);
     }
     const data = JSON.parse(JSON.stringify(await response.json()), (_key, value) =>
       typeof value === "string" ? value.replaceAll(token, "[redacted]") : value);

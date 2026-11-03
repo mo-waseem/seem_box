@@ -1,7 +1,8 @@
 export type StructuredSummary = { summary: string; takeaways: string[]; conclusion: string };
+export type SummaryLanguage = "en" | "ar";
 type Complete = (args: { system: string; user: string }) => Promise<string>;
 
-const SUMMARY_SYSTEM = [
+const SUMMARY_SYSTEM_BASE = [
   "You summarize YouTube videos from their transcripts.",
   'Respond with ONLY a JSON object of this exact shape: {"summary": string, "takeaways": string[], "conclusion": string}.',
   "No markdown fences and no text before or after the JSON.",
@@ -9,9 +10,28 @@ const SUMMARY_SYSTEM = [
   '"takeaways": 5-8 key points, each a single standalone sentence.',
   '"conclusion": one short paragraph (2-4 sentences) stating the video conclusion and its practical value.',
 ].join("\n");
-const PART_SYSTEM = "You are given one part of a long YouTube video transcript. Summarize that part in 3-5 sentences of plain text. No preamble.";
+const PART_SYSTEM_BASE = "You are given one part of a long YouTube video transcript. Summarize that part in 3-5 sentences of plain text. No preamble.";
 
-export async function summarizeTranscript(input: { title: string; author: string; transcript: string }, complete: Complete): Promise<StructuredSummary> {
+export function normalizeLanguage(value: unknown): SummaryLanguage {
+  return value === "ar" ? "ar" : "en";
+}
+
+function systemFor(language: SummaryLanguage): string {
+  if (language === "ar") {
+    return `${SUMMARY_SYSTEM_BASE}\nWrite the summary, takeaways, and conclusion in Modern Standard Arabic. Keep the JSON keys in English.`;
+  }
+  return `${SUMMARY_SYSTEM_BASE}\nWrite the summary, takeaways, and conclusion in English.`;
+}
+
+function partSystemFor(language: SummaryLanguage): string {
+  if (language === "ar") return `${PART_SYSTEM_BASE} Write in Modern Standard Arabic.`;
+  return PART_SYSTEM_BASE;
+}
+
+export async function summarizeTranscript(input: { title: string; author: string; transcript: string; language?: unknown }, complete: Complete): Promise<StructuredSummary> {
+  const language = normalizeLanguage(input.language);
+  const summarySystem = systemFor(language);
+  const partSystem = partSystemFor(language);
   let user = `Title: ${input.title}\nChannel: ${input.author}\n\nTranscript:\n${input.transcript}`;
   if (input.transcript.length > 90_000) {
     const chunks: string[] = [];
@@ -28,12 +48,12 @@ export async function summarizeTranscript(input: { title: string; author: string
     }
     const parts: string[] = [];
     for (let index = 0; index < chunks.length; index += 1) {
-      const text = await complete({ system: PART_SYSTEM, user: `Title: ${input.title}\n\nPart ${index + 1} of ${chunks.length}:\n${chunks[index]}` });
+      const text = await complete({ system: partSystem, user: `Title: ${input.title}\n\nPart ${index + 1} of ${chunks.length}:\n${chunks[index]}` });
       parts.push(`Part ${index + 1}:\n${text.trim()}`);
     }
     user = `This video transcript is long, so it was summarized in parts. Combine the part summaries into the final JSON summary of the whole video.\n\nTitle: ${input.title}\nChannel: ${input.author}\n\nPart summaries:\n${parts.join("\n\n")}`;
   }
-  return parseStructured(await complete({ system: SUMMARY_SYSTEM, user }));
+  return parseStructured(await complete({ system: summarySystem, user }));
 }
 
 export function parseStructured(text: string): StructuredSummary {

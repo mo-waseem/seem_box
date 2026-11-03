@@ -7,10 +7,12 @@ export const maxDuration = 300;
 export async function POST(request: Request) {
   let url: unknown;
   let model: unknown;
+  let language: unknown;
   try {
-    const body = (await request.json()) as { url?: unknown; model?: unknown };
+    const body = (await request.json()) as { url?: unknown; model?: unknown; language?: unknown };
     url = body?.url;
     model = body?.model;
+    language = body?.language;
   } catch {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
@@ -20,13 +22,17 @@ export async function POST(request: Request) {
   if (model !== undefined && (typeof model !== "string" || !/^[a-zA-Z0-9._:-]{1,120}$/.test(model))) {
     return Response.json({ error: "Invalid model." }, { status: 400 });
   }
+  if (language !== undefined && language !== "en" && language !== "ar") {
+    return Response.json({ error: "Invalid language (supported: en, ar)." }, { status: 400 });
+  }
   try {
-    const transcript = await getTranscript(url);
+    const transcript = await getTranscript(url, language ?? "en");
     const result = await summarize({
       title: transcript.title,
       author: transcript.author,
       transcript: transcript.text,
       model: typeof model === "string" ? model : undefined,
+      language: language ?? "en",
     });
     return Response.json({
       video: {
@@ -37,6 +43,7 @@ export async function POST(request: Request) {
       summary: result.summary,
       takeaways: result.takeaways,
       conclusion: result.conclusion,
+      language: result.language,
       meta: {
         provider: result.provider,
         model: result.model,

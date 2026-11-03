@@ -3,9 +3,9 @@ import { AppError } from "@/lib/errors";
 import { COMPAT_BASE_URL, COMPAT_MODEL, compatComplete } from "./compat";
 import { CODEX_MODEL, codexComplete, resolveCodexModel } from "./codex";
 import { readCodexTokens } from "./token-store";
-import { summarizeTranscript, type StructuredSummary } from "./summary-core";
+import { normalizeLanguage, summarizeTranscript, type StructuredSummary, type SummaryLanguage } from "./summary-core";
 
-export { parseStructured, type StructuredSummary } from "./summary-core";
+export { parseStructured, type StructuredSummary, type SummaryLanguage } from "./summary-core";
 export type ProviderID = "codex" | "compat";
 export type ProviderStatus = {
   provider: ProviderID | null;
@@ -31,10 +31,11 @@ function pickProvider(codexLoggedIn: boolean): ProviderID | null {
   return null;
 }
 
-export async function summarize(input: { title: string; author: string; transcript: string; model?: string }): Promise<StructuredSummary & { provider: ProviderID; model: string }> {
+export async function summarize(input: { title: string; author: string; transcript: string; model?: string; language?: unknown }): Promise<StructuredSummary & { provider: ProviderID; model: string; language: SummaryLanguage }> {
   const provider = pickProvider((await readCodexTokens()) !== null);
   if (!provider) throw new AppError("No LLM provider is ready. Connect ChatGPT in Settings, or configure SEEM_BOX_COMPAT_BASE_URL in .env.local.", 400);
   const model = provider === "codex" ? await resolveCodexModel(input.model) : COMPAT_MODEL;
-  const structured = await summarizeTranscript(input, (args) => provider === "codex" ? codexComplete({ ...args, model }) : compatComplete({ ...args, model }));
-  return { ...structured, provider, model };
+  const language = normalizeLanguage(input.language);
+  const structured = await summarizeTranscript({ ...input, language }, (args) => provider === "codex" ? codexComplete({ ...args, model }) : compatComplete({ ...args, model }));
+  return { ...structured, provider, model, language };
 }

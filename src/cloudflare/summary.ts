@@ -1,7 +1,7 @@
 import { AppError } from "../lib/errors";
 import type { AuthBindings, AuthOperation, CodexTokens } from "../lib/llm/auth-types";
 import { codexForbiddenError, errorDetail, readBoundedText, readSSE, requestResponses } from "../lib/llm/codex-http";
-import { summarizeTranscript, type StructuredSummary } from "../lib/llm/summary-core";
+import { normalizeLanguage, summarizeTranscript, type StructuredSummary, type SummaryLanguage } from "../lib/llm/summary-core";
 
 export type WorkerLLMEnv = AuthBindings & {
   SEEM_BOX_LLM_PROVIDER?: string;
@@ -59,14 +59,15 @@ export async function workerProviderStatus(env: WorkerLLMEnv) {
   };
 }
 
-export async function summarizeForWorker(input: { title: string; author: string; transcript: string }, env: WorkerLLMEnv, signal: AbortSignal): Promise<StructuredSummary & { provider: "codex" | "compat"; model: string }> {
+export async function summarizeForWorker(input: { title: string; author: string; transcript: string; language?: unknown }, env: WorkerLLMEnv, signal: AbortSignal): Promise<StructuredSummary & { provider: "codex" | "compat"; model: string; language: SummaryLanguage }> {
   signal.throwIfAborted();
   let tokens = env.SEEM_BOX_AUTH ? await workerAuth<CodexTokens | null>(env, { op: "read" }) : null;
   const provider = pickProvider(env, tokens);
   if (!provider) throw new AppError("No LLM provider is ready. Connect ChatGPT or configure SEEM_BOX_COMPAT_BASE_URL.", 400);
   const model = provider === "codex" ? env.SEEM_BOX_CODEX_MODEL?.trim() || "gpt-5.4" : env.SEEM_BOX_COMPAT_MODEL?.trim() || "gpt-4o-mini";
+  const language = normalizeLanguage(input.language);
   const baseURL = provider === "compat" ? compatBaseURL(env) : "";
-  const structured = await summarizeTranscript(input, async ({ system, user }) => {
+  const structured = await summarizeTranscript({ ...input, language }, async ({ system, user }) => {
     signal.throwIfAborted();
     if (provider === "codex") {
       if (!tokens) throw new AppError("ChatGPT is not connected. Open Settings and connect via device code.", 400);
@@ -110,5 +111,5 @@ export async function summarizeForWorker(input: { title: string; author: string;
     if (typeof content !== "string" || !content.trim()) throw new AppError("The sidecar model returned no content.", 502);
     return content.trim();
   });
-  return { ...structured, provider, model };
+  return { ...structured, provider, model, language };
 }

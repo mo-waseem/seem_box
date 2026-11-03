@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,17 +7,27 @@
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
-    <h1>Youtube AI Summary</h1>
-    <p>Simple summaries. Key takeaways. Just what you need.</p>
-    <p>Connected server: <a href="https://seem-box.waseemkn96.workers.dev/settings" target="_blank" rel="noreferrer">seem-box.waseemkn96.workers.dev</a>. Configure its AI provider in Settings.</p>
+    <div class="top-row">
+      <h1 id="app-title">Youtube AI Summary</h1>
+      <label class="lang-picker"><span id="ui-lang-label">Interface language</span>
+        <select id="ui-lang">
+          <option value="en">English</option>
+          <option value="ar">العربية</option>
+        </select>
+      </label>
+    </div>
+    <p id="tagline">Simple summaries. Key takeaways. Just what you need.</p>
+    <p><span id="connected-label">Connected server:</span> <a id="server-link" target="_blank" rel="noreferrer"></a>. <span id="settings-note">Configure its AI provider in Settings.</span></p>
     <form id="settings">
-      <label for="token">Pairing token</label>
-      <p>Use the same value as the deployed server's <code>SEEM_BOX_EXTENSION_TOKEN</code> secret. This is not your AI API key or YouTube cookie.</p>
+      <label for="token" id="token-label">Pairing token</label>
+      <p id="token-help">Use the same value as the connected server's <code>SEEM_BOX_EXTENSION_TOKEN</code> (in <code>.env.local</code> for a local server). This is not your AI API key or YouTube cookie.</p>
       <input id="token" type="password" minlength="32" required autocomplete="off" spellcheck="false">
-      <button type="submit">Save Connection</button>
+      <button type="submit" id="save-btn">Save Connection</button>
     </form>
     <p id="status" role="status"></p>
-    <small>The token is stored locally in this Chrome profile. Only transcript text and video details are sent to your app when you click Summarize.</small>
+    <small id="stored-note">The token is stored locally in this Chrome profile. Only transcript text and video details are sent to your app when you click Summarize.</small>
+    <script src="config.js"></script>
+    <script src="i18n.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

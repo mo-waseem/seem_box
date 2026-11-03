@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "extension:configure": "node scripts/configure-extension.mjs",
     "build": "next build",
     "build:cloudflare": "wrangler deploy --config wrangler.jsonc --dry-run --outdir .worker-build",
     "preview:cloudflare": "wrangler dev --config wrangler.jsonc",

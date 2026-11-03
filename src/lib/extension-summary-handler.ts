@@ -5,7 +5,7 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024;
 export async function handleExtensionSummary(
   request: Request,
   token: string | undefined,
-  summarize: (input: { videoId: string; title: string; author: string; transcript: string }, signal: AbortSignal) => Promise<unknown>,
+  summarize: (input: { videoId: string; title: string; author: string; transcript: string; language?: unknown }, signal: AbortSignal) => Promise<unknown>,
 ): Promise<Response> {
   try {
     if (!token || token.length < 32) {
@@ -61,7 +61,7 @@ export async function handleExtensionSummary(
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new AppError("Invalid request body.", 400);
     }
-    const { videoId, title, author, transcript } = body as Record<string, unknown>;
+    const { videoId, title, author, transcript, language } = body as Record<string, unknown>;
     if (typeof videoId !== "string" || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
       throw new AppError("Invalid videoId.", 400);
     }
@@ -73,6 +73,9 @@ export async function handleExtensionSummary(
     }
     if (typeof transcript !== "string" || !transcript.trim() || transcript.length > 500_000) {
       throw new AppError("Invalid transcript (required, maximum 500000 characters).", 400);
+    }
+    if (language !== undefined && language !== "en" && language !== "ar") {
+      throw new AppError("Invalid language (supported: en, ar).", 400);
     }
 
     const abortController = new AbortController();
@@ -118,7 +121,7 @@ export async function handleExtensionSummary(
         }, 300_000);
         void (async () => {
           try {
-            finish(await summarize({ videoId, title, author, transcript: transcript.trim() }, abortController.signal));
+            finish(await summarize({ videoId, title, author, transcript: transcript.trim(), language: language ?? "en" }, abortController.signal));
           } catch (error) {
             finish({ error: error instanceof Error ? error.message : "Unexpected error." });
           }

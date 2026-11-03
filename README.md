@@ -105,21 +105,43 @@ Long transcripts are summarized in chunks before the final structured result is 
 
 ## Chrome Extension (Preview)
 
-The unpacked Manifest V3 extension in `extension/` adds a **Summarize** button at the bottom-right of YouTube watch pages. It reads captions in your browser session, then sends transcript text and video metadata to `https://seem-box.waseemkn96.workers.dev`. It does not send YouTube cookies to the app, download videos, or transcribe audio.
+The unpacked Manifest V3 extension in `extension/` adds a **Summarize** button at the bottom-right of YouTube watch pages. It reads captions in your browser session, then sends transcript text and video metadata to the configured server (default: `http://localhost:3000`). It does not send YouTube cookies to the app, download videos, or transcribe audio.
 
 1. Generate a random pairing token: `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
-2. Configure `SEEM_BOX_EXTENSION_TOKEN` as a secret on the deployed server and configure its AI provider at `https://seem-box.waseemkn96.workers.dev/settings`. Setting it only in local `.env.local` does not configure the deployed server.
+2. Set `SEEM_BOX_EXTENSION_TOKEN` in `.env.local`, start (or restart) the local server with `npm run dev`, and configure its AI provider at `http://localhost:3000/settings`.
 3. In Chrome 120 or newer, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select this project's `extension` folder.
 4. Open the extension's toolbar popup and enter the same pairing token. This is a separate app credential, not a provider API key or YouTube cookie.
 5. Reload an existing YouTube tab, open a video such as `https://www.youtube.com/watch?v=pqlWNihgdjI`, and click the page's **Summarize** button. Open the panel and click **Summarize Video** to start retrieval.
 
-The extension prefers English manual captions, then English auto-generated captions, then the first available language. If YouTube blocks the caption request, open YouTube's **Show transcript** panel and retry. You can also expand **Paste a transcript instead** in the extension panel. Summaries appear in the panel with key takeaways and a conclusion; navigating to another video clears the old result.
+On opening or switching to a standard YouTube video, the extension tries to open YouTube's **Show transcript** panel automatically. It waits up to 15 seconds for the controls and transcript to load, clicks at most once per navigation, and stops pending attempts when you leave the video. Summarization starts only when you click **Summarize Video**. If caption retrieval fails while the panel is loading, the extension waits for that attempt and retries retrieval once if transcript text becomes available.
 
-Permissions are limited to storage, script execution, `www.youtube.com`, and `seem-box.waseemkn96.workers.dev`. The pairing token is kept in extension-only local storage, not sync storage or the YouTube page. Captions are processed only on click and go to the deployed app and its configured AI provider. Treat the pairing token as a secret; rotate it in both places if exposed. The extension token protects only the extension-summary endpoint; the deployed Worker's separate admin password protects the personal app's other dynamic endpoints.
+The extension prefers captions in the selected language (manual, then auto-generated), falling back to English captions and then the first available language; the summary itself is always written in the selected language. If automatic opening or caption retrieval fails, the extension expands a help section: expand the video's description, click **Show transcript**, wait for text to appear, leave the panel open, and retry **Summarize Video**. You can also expand **Paste a transcript instead** in the extension panel. Automatic opening depends on YouTube exposing its transcript controls; it cannot create a transcript for a video without one. Summaries appear in the panel with key takeaways and a conclusion; navigating to another video clears the old result.
 
-This is a prototype, not a published Chrome Web Store extension. YouTube player APIs, transcript DOM selectors, and caption URLs are unofficial and may change. Browser-side retrieval can still be blocked and has not been verified against a signed-in Chrome session here. Shorts, live caption streaming, language selection, and changing the server through the settings UI are not supported in this version. Closing/reloading the tab discards the UI request; backend work already started may continue. After extension code or permissions change, reload it in `chrome://extensions`, approve any permission prompts, and reload YouTube.
+The extension interface itself is available in English and Arabic with right-to-left text layout; the launcher stays pinned to the bottom-right. It follows the browser UI language automatically; switch manually from the language dropdown in the toolbar popup or the **EN/ع** button in the panel header. The same choice also sets the summary language, and re-summarizes an existing result when switched. The choice is stored with the extension settings.
+
+Permissions are limited to storage, script execution, `www.youtube.com`, and the configured server host (default: `localhost`). The pairing token is kept in extension-only local storage, not sync storage or the YouTube page. Opening a video may load its transcript within YouTube; transcript text and video details are sent to the configured app and its AI provider only when you click to summarize. Treat the pairing token as a secret; rotate it in both places if exposed. The extension token protects only the extension-summary endpoint.
+
+This is a prototype, not a published Chrome Web Store extension. YouTube player APIs, transcript DOM selectors, and caption URLs are unofficial and may change. Browser-side retrieval can still be blocked and has not been verified against a signed-in Chrome session here. Shorts, live caption streaming, and changing the server through the settings UI are not supported in this version. Closing/reloading the tab discards the UI request; backend work already started may continue. After extension code or permissions change, reload it in `chrome://extensions`, approve any permission prompts, and reload YouTube.
 
 The new `POST /api/extension-summary` endpoint requires the pairing token, validates and bounds the submitted text, and reuses the configured summarizer. Accepted requests stream JSON whitespace while the model works to keep the connection active; provider failures after streaming begins use an `{ "error": "..." }` body with HTTP 200. Authentication and validation failures use normal HTTP error statuses.
+
+The floating launcher is icon-only until hovered or keyboard-focused. In fullscreen it sits above YouTube's playback controls and fades out after 3 seconds of inactivity. Pointer movement, a pointer press, or a key press reveals it again. It stays visible while the summary panel is open, while hovered, or while keyboard-focused; leaving fullscreen restores normal positioning and visibility.
+
+### Configuring the extension server
+
+Set the public server origin in `.env.local`:
+
+```dotenv
+SEEM_BOX_EXTENSION_URL=http://localhost:3000
+```
+
+Run `npm run extension:configure`, reload the extension at `chrome://extensions`, and refresh YouTube. You can also override it for one invocation:
+
+```bash
+SEEM_BOX_EXTENSION_URL=https://your-server.example npm run extension:configure
+```
+
+The command reads `.env` then `.env.local`; shell environment variables take precedence. If unset, the URL defaults to `http://localhost:3000`. Use an HTTP(S) origin with an optional port, without a path, query, or credentials. Chrome cannot read environment variables directly: this command writes the public URL to `extension/config.js` and updates `extension/manifest.json` host permissions. API requests, settings links, and UI labels use the same generated value. Tokens and other environment variables are not copied into the extension. Chrome host permissions cover all ports on the configured host; requests use the exact configured port. For a remote server, configure its AI provider and pairing token on that server.
 
 ## Checks
 
@@ -127,7 +149,7 @@ The new `POST /api/extension-summary` endpoint requires the pairing token, valid
 npm run typecheck
 npm run lint
 npm run build
-node --test scripts/extension-check.mjs
+node --test scripts/extension-check.mjs scripts/extension-transcript-check.mjs scripts/extension-config-check.mjs scripts/extension-fullscreen-check.mjs
 NODE_OPTIONS=--conditions=react-server npx tsx scripts/extension-summary-check.ts
 NODE_OPTIONS=--conditions=react-server npx tsx scripts/auth-storage-check.ts
 node scripts/auth-worker-check.mjs

@@ -53,6 +53,7 @@ async function main() {
       { title: null }, { title: "x".repeat(501) },
       { author: false }, { author: "x".repeat(301) },
       { transcript: null }, { transcript: " \n\t" }, { transcript: "x".repeat(500_001) },
+      { language: "fr" }, { language: 123 },
     ]) {
       await check(request(JSON.stringify({ ...valid, ...patch })), 400);
     }
@@ -77,8 +78,9 @@ async function main() {
       assert.ok(chunks < 20);
     }
     assert.equal(calls, 0, "Rejected requests must not reach the LLM");
-    assert.deepEqual(await check(request(), 200), { ...summary, provider: "compat", model: COMPAT_MODEL });
+    assert.deepEqual(await check(request(), 200), { ...summary, provider: "compat", model: COMPAT_MODEL, language: "en" });
     assert.equal(prompt, "Title: Video\nChannel: Channel\n\nTranscript:\nTranscript text.");
+    assert.deepEqual(await check(request(JSON.stringify({ ...valid, language: "ar" })), 200), { ...summary, provider: "compat", model: COMPAT_MODEL, language: "ar" });
     await check(request(JSON.stringify({ ...valid, title: "x".repeat(500), author: "x".repeat(300), transcript: "x".repeat(500_000) })), 200);
     await check(request(JSON.stringify({ ...valid, title: "", author: "" })), 200);
     const padded = JSON.stringify(valid).padEnd(2 * 1024 * 1024, " ");
@@ -121,7 +123,7 @@ async function main() {
           } else {
             const result = JSON.parse(new TextDecoder().decode((await reader.read()).value));
             if (fail) assert.match(result.error, /Sidecar error \(HTTP 503\)/);
-            else assert.deepEqual(result, { ...summary, provider: "compat", model: COMPAT_MODEL });
+            else assert.deepEqual(result, { ...summary, provider: "compat", model: COMPAT_MODEL, language: "en" });
           }
           // A surviving heartbeat would attempt to enqueue into a closed stream.
           mock.timers.tick(30_000);
